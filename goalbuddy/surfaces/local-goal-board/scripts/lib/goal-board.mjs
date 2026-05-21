@@ -289,7 +289,7 @@ function titleForTask(task) {
 function compactTaskTitle(value) {
   const text = cleanText(value).replace(/\.$/, "");
   const routeMatch = text.match(/^Implement\b.*?\s(\/[A-Za-z0-9_./:-]+)\s+(route|queue slice|slice)\b/i);
-  if (routeMatch) return truncateTitle(`Implement ${routeMatch[1]} ${routeMatch[2]}`);
+  if (routeMatch) return `Implement ${routeMatch[1]} ${routeMatch[2]}`;
 
   const firstClause = text
     .split(/(?<=[.!?])\s+|\s+(?:Use only|Add|Match|Render|Clearly label|Do not)\b/i)[0]
@@ -300,14 +300,7 @@ function compactTaskTitle(value) {
     .replace(/[.;:,]\s*$/, "")
     .trim();
 
-  return truncateTitle(firstClause || text);
-}
-
-function truncateTitle(value, maxLength = 82) {
-  const text = cleanText(value).replace(/\.$/, "");
-  if (text.length <= maxLength) return text;
-  const shortened = text.slice(0, maxLength + 1).replace(/\s+\S*$/, "").trim();
-  return `${shortened || text.slice(0, maxLength).trim()}...`;
+  return firstClause || text;
 }
 
 function columnForStatus(status) {
@@ -1503,8 +1496,13 @@ h1 {
 .task-title {
   margin: 0;
   color: #2f3437;
+  display: -webkit-box;
   font-size: 15px;
   line-height: 1.35;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
 }
 
 .card-footer {

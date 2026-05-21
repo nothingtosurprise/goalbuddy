@@ -37,10 +37,10 @@ test("loads depth-1 subgoal boards into parent task payloads", () => {
   assert.equal(parentTask.subgoal.board.tasks.find((task) => task.id === "T002").subgoal, null);
 });
 
-test("uses compact card titles while preserving full objectives", () => {
-  const root = mkdtempSync(join(tmpdir(), "goalbuddy-compact-titles-"));
+test("uses readable card titles while preserving full objectives", () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-readable-titles-"));
   try {
-    const goalDir = join(root, "compact-titles");
+    const goalDir = join(root, "readable-titles");
     mkdirSync(join(goalDir, "notes"), { recursive: true });
     writeFileSync(join(goalDir, "state.yaml"), `version: 2
 goal:
@@ -70,6 +70,13 @@ tasks:
     status: queued
     objective: "This objective can stay much more detailed because it belongs in the modal, not on the card face."
     receipt: null
+  - id: T004
+    title: "Run installed-Cursor runtime proof for a named model request through the local BYOK bridge"
+    type: worker
+    assignee: Worker
+    status: queued
+    objective: "Run installed-Cursor runtime proof for a named model request through the local BYOK bridge."
+    receipt: null
 `);
 
     const payload = createBoardPayload(goalDir);
@@ -77,6 +84,10 @@ tasks:
     assert.equal(payload.tasks.find((task) => task.id === "T001").objective.includes("admin_seed_metrics.enrichment_qa"), true);
     assert.equal(payload.tasks.find((task) => task.id === "T002").title, "Implement /contacts/con_aaron_keller route");
     assert.equal(payload.tasks.find((task) => task.id === "T003").title, "Human-friendly release title");
+    assert.equal(
+      payload.tasks.find((task) => task.id === "T004").title,
+      "Run installed-Cursor runtime proof for a named model request through the local BYOK bridge",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -249,6 +260,7 @@ test("writes a minimal GoalBuddy web app into the goal directory", () => {
   assert.match(css, /:root\[data-theme="dark"\]/);
   assert.match(css, /:root\[data-density="compact"\] \.task-card/);
   assert.match(css, /:root\[data-completed-visibility="collapse"\]/);
+  assert.match(css, /-webkit-line-clamp: 5/);
   assert.match(css, /\.subgoal-board/);
   assert.match(css, /\.board-error/);
   assert.match(js, /new EventSource\("\.\/events"\)/);
