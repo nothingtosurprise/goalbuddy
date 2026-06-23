@@ -35,6 +35,7 @@ rules:
   queued_required_worker_blocks_completion: true
   continuous_until_full_outcome: true
   missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
   preserve_and_validate_existing_plan: true
   intake_misfire_must_be_audited: true
   goal_pressure_requires_oracle: true
@@ -58,7 +59,7 @@ visual_board:
   local:
     status: not_requested # not_requested | starting | live | generated | blocked
     url: null
-    command: "npx goalbuddy board docs/goals/<goal-slug>"
+    command: "node <skill-path>/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/<goal-slug>"
 
 active_task: T001
 

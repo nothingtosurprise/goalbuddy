@@ -168,9 +168,9 @@ test("accepts explicit non-installed agent states with actionable warnings", () 
       judge: "unknown",
     });
     assert.match(result.stdout.warnings.join("\n"), /PM fallback/i);
-    assert.match(result.stdout.warnings.join("\n"), /npx goalbuddy agents/i);
-    assert.match(result.stdout.warnings.join("\n"), /npx goalbuddy install/i);
-    assert.match(result.stdout.warnings.join("\n"), /npx goalbuddy doctor/i);
+    assert.match(result.stdout.warnings.join("\n"), /install channel with: agents/i);
+    assert.match(result.stdout.warnings.join("\n"), /install channel with: install/i);
+    assert.match(result.stdout.warnings.join("\n"), /install channel with: doctor/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1160,6 +1160,65 @@ checks:
     const result = runChecker(root);
     assert.equal(result.status, 1);
     assert.match(result.stdout.errors.join("\n"), /missing input or credentials should block specific tasks/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("accepts terminal approval wait when exact human approval is the only remaining action", () => {
+  const root = makeRoot();
+  try {
+    writeState(root, `
+version: 2
+goal:
+  title: "Run production migration"
+  slug: "run-production-migration"
+  kind: specific
+  tranche: "Apply the approved migration after exact owner approval."
+  status: blocked
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+active_task: null
+tasks:
+  - id: T001
+    type: worker
+    assignee: Worker
+    status: blocked
+    objective: "Apply production migration after exact approval."
+    allowed_files:
+      - db/migrations/**
+    verify:
+      - npm test
+    stop_if:
+      - "Need exact production approval phrase."
+    receipt:
+      result: blocked
+      waiting_for_user_approval: true
+      required_reply: "approve 20260521234500"
+      blocked_reason: "Production migration requires exact human approval before any destructive operation."
+      summary: "Asked once for the exact approval phrase and stopped."
+checks:
+  dirty_fingerprint: clean
+  last_verification:
+    result: pass
+    task: T001
+    commands:
+      - cmd: npm test
+        status: pass
+`);
+    const result = runChecker(root);
+    assert.equal(result.status, 0, result.stderr || JSON.stringify(result.stdout));
+    assert.equal(result.stdout.ok, true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

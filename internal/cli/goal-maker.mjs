@@ -735,7 +735,7 @@ function updateReport() {
     latest_version: null,
     update_available: false,
     check_status: "unknown",
-    update_command: `npx ${canonicalCliName}`,
+    update_command: detectUpdateCommand(),
   };
 
   try {
@@ -748,6 +748,23 @@ function updateReport() {
   }
 
   return report;
+}
+
+function detectUpdateCommand() {
+  if (process.env.GOALBUDDY_TEST_UPDATE_COMMAND) return process.env.GOALBUDDY_TEST_UPDATE_COMMAND;
+  if (process.env.CLAUDE_PLUGIN_ROOT || normalizedPath(__dirname).includes("/.claude/")) return `/plugin update ${pluginName}@${pluginName}`;
+
+  const userAgent = process.env.npm_config_user_agent || "";
+  if (/^pnpm\//.test(userAgent)) return `pnpm update -g ${canonicalCliName}`;
+  if (/^bun\//.test(userAgent)) return `bun update -g ${canonicalCliName}`;
+  if (process.env.MISE_EXE || process.env.MISE_SHELL || process.env.MISE_PROJECT_ROOT) return `mise upgrade npm:${canonicalCliName}`;
+  if (/^npm\//.test(userAgent)) return `npx ${canonicalCliName}@latest`;
+
+  return `use the install channel that installed ${canonicalProductName}`;
+}
+
+function normalizedPath(path) {
+  return String(path).replace(/\\/g, "/");
 }
 
 function plugin() {

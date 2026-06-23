@@ -236,6 +236,7 @@ test("check-update reports newer published GoalBuddy versions", () => {
   const env = {
     ...process.env,
     GOALBUDDY_TEST_NPM_LATEST_VERSION: "99.0.0",
+    GOALBUDDY_TEST_UPDATE_COMMAND: "/plugin update goalbuddy@goalbuddy",
   };
 
   const result = runGoalMaker(["check-update", "--json"], { env });
@@ -244,12 +245,23 @@ test("check-update reports newer published GoalBuddy versions", () => {
   assert.equal(report.current_version, packageVersion);
   assert.equal(report.latest_version, "99.0.0");
   assert.equal(report.update_available, true);
-  assert.equal(report.update_command, "npx goalbuddy");
+  assert.equal(report.update_command, "/plugin update goalbuddy@goalbuddy");
 
   const human = runGoalMaker(["check-update"], { env });
   assert.equal(human.status, 0, human.stderr || human.stdout);
   assert.match(human.stdout, /GoalBuddy 99\.0\.0 is available/);
-  assert.match(human.stdout, /Update with: npx goalbuddy/);
+  assert.match(human.stdout, /Update with: \/plugin update goalbuddy@goalbuddy/);
+});
+
+test("check-update avoids guessing an unknown install channel", () => {
+  const env = {
+    GOALBUDDY_TEST_NPM_LATEST_VERSION: "99.0.0",
+  };
+
+  const result = runGoalMaker(["check-update", "--json"], { env });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.update_command, "use the install channel that installed GoalBuddy");
 });
 
 test("prompt renders a compact active task prompt without dumping full state", () => {

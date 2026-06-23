@@ -64,6 +64,18 @@ Tiny tasks are allowed when the failure is isolated, the risk is high, the scope
 
 Do not stop because a slice needs owner input, credentials, production access, destructive operations, or policy decisions. Mark that exact slice blocked with a receipt, create the smallest safe follow-up or workaround task, and continue all local, non-destructive work that can still move the goal toward the full outcome.
 
+If an exact human approval phrase is the only remaining blocker and no safe local work remains, ask once and stop. Preserve the exact phrase in the blocked receipt as `required_reply`, set `waiting_for_user_approval: true`, set `goal.status: blocked`, and set `active_task: null`. Do not keep posting approval prompts until the user replies.
+
+## Board Health
+
+The PM owns board health. If the board looks stale, misleading, offline, or inconsistent, run the bundled checker:
+
+```bash
+node <skill-path>/scripts/check-goal-state.mjs docs/goals/<slug>
+```
+
+If the local board is running, compare `state.yaml` to the live board API. Repair only GoalBuddy control files unless an active Worker or PM task explicitly allows product-file edits.
+
 ## Canonical Board
 
 Machine truth lives at:

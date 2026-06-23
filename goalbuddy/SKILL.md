@@ -58,7 +58,7 @@ node <skill-path>/scripts/check-update.mjs --json
 If the checker reports `update_available: true`, tell the user once before continuing:
 
 ```text
-GoalBuddy <latest_version> is available. After this turn, update with: npx goalbuddy
+GoalBuddy <latest_version> is available. After this turn, update through the channel that installed GoalBuddy: `/plugin update goalbuddy@goalbuddy`, `npx goalbuddy@latest`, `npm i -g goalbuddy`, `pnpm update -g goalbuddy`, `bun update -g goalbuddy`, or `mise upgrade npm:goalbuddy`.
 ```
 
 Do not block intake or board creation on update checking. If the checker is missing, cannot find npm, or network access fails, continue silently unless the user asked about updates.
@@ -93,9 +93,9 @@ Recommended options:
 1. Local live board (Recommended) - starts immediately, requires no credentials, and lets the user watch tasks populate inside Codex or Claude Code.
 2. No visual board - best for quick or private goals where the file board is enough.
 
-If the user chooses the local live board, create the goal directory, `notes/`, and an initial minimal `state.yaml` as soon as the slug is known, then run `npx goalbuddy board docs/goals/<slug>` and open the printed local URL in the AI coding agent's in-app browser (the Codex in-app Browser, the Claude Code preview, or the user's regular browser). The default local hub is `http://goalbuddy.localhost:41737/`, and board URLs normally look like `http://goalbuddy.localhost:41737/<slug>/`. In short: start the local board before filling the task list so the board pops up right away and cards populate live as `state.yaml` changes. Include the printed board URL in the final prep response as an actual clickable Markdown link, for example `[Open GoalBuddy board](http://goalbuddy.localhost:41737/<slug>/)`. Do not put the board URL only in a code block, quote, HTML comment, or prose that the UI cannot click.
+If the user chooses the local live board, create the goal directory, `notes/`, and an initial minimal `state.yaml` as soon as the slug is known, then run `node <skill-path>/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/<slug>` and open the printed local URL in the AI coding agent's in-app browser (the Codex in-app Browser, the Claude Code preview, or the user's regular browser). The default local hub is `http://goalbuddy.localhost:41737/`, and board URLs normally look like `http://goalbuddy.localhost:41737/<slug>/`. In short: start the local board before filling the task list so the board pops up right away and cards populate live as `state.yaml` changes. Include the printed board URL in the final prep response as an actual clickable Markdown link, for example `[Open GoalBuddy board](http://goalbuddy.localhost:41737/<slug>/)`. Do not put the board URL only in a code block, quote, HTML comment, or prose that the UI cannot click.
 
-If `http://goalbuddy.localhost:41737/<slug>/` returns 404, do not assume the existing process is stale and do not stop it. First check `http://127.0.0.1:41737/api/boards`. If that endpoint returns board JSON, the port is the shared multi-board hub; rerun `npx goalbuddy board docs/goals/<slug>` with the absolute goal path if needed so the new goal registers on the same port. Only stop a specific process on 41737 when `/api/boards` is missing, returns 404, or otherwise proves the listener is not a current GoalBuddy multi-board hub.
+If `http://goalbuddy.localhost:41737/<slug>/` returns 404, do not assume the existing process is stale and do not stop it. First check `http://127.0.0.1:41737/api/boards`. If that endpoint returns board JSON, the port is the shared multi-board hub; rerun `node <skill-path>/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal <absolute-goal-path>` if needed so the new goal registers on the same port. Only stop a specific process on 41737 when `/api/boards` is missing, returns 404, or otherwise proves the listener is not a current GoalBuddy multi-board hub.
 
 If the user wants an external board, GitHub sync, Slack digest, Linear handoff, or any other custom integration, do not install a GoalBuddy catalog item. Treat it as normal implementation work: create a concrete task that designs and verifies that integration inside the target repo or asks the operator for the required credentials and scope.
 
@@ -474,6 +474,22 @@ Blocked tasks do not necessarily block the goal. The PM should keep doing safe l
 
 Avoid setting `goal.status: blocked` for missing input, credentials, production access, destructive-operation permission, or policy decisions. Block the specific task instead, record the missing requirement, and continue with every safe local workaround or adjacent slice.
 
+Exception: if an exact human approval phrase is the only remaining blocker and no safe local work remains, ask once, preserve the exact phrase, and stop. Set `goal.status: blocked`, set `active_task: null`, mark every unfinished task `blocked`, and write a receipt with `result: blocked`, `waiting_for_user_approval: true`, and `required_reply: "<exact phrase>"`. Do not rephrase, retry, spawn follow-up work, or post another approval prompt until the user replies.
+
+## Board Health Stewardship
+
+The PM owns board health. Do not auto-spawn a separate always-on steward by default.
+
+When the board looks stale, misleading, offline, Not Found, or inconsistent, run the bundled checker:
+
+```bash
+node <skill-path>/scripts/check-goal-state.mjs docs/goals/<slug>
+```
+
+If a local board server is running, compare `state.yaml` with `http://127.0.0.1:41737/<slug>/api/board` or `http://127.0.0.1:41737/api/boards`. Repair only GoalBuddy control files: `goal.md`, `state.yaml`, `notes/`, depth-1 `subgoals/`, and `.goalbuddy-board/`. Never edit product implementation files during board-health work unless there is an active Worker or PM task with explicit `allowed_files`.
+
+Board-health work should verify these truths: `active_task` matches live task status, done and blocked tasks have receipts, human-blocked work is in the blocked column, future work stays queued, and the live board/API reflects `state.yaml`.
+
 ## Operator Escalation
 
 When Scout, Judge, Worker, or PM discovers a problem, improvement opportunity, product suggestion, follow-up repair, or tool limitation that should not be fixed inside the current active task, do not let it disappear in chat.
@@ -528,9 +544,9 @@ Use these `state.yaml` values:
 | State | Meaning | Next action |
 |---|---|---|
 | `installed` | Matching Scout/Worker/Judge agent configs were found in the expected user or project agent location. | Continue. |
-| `bundled_not_installed` | The bundled `goal_*.toml` template exists with the skill, but no matching installed agent config was verified. | `/goal` can proceed through PM fallback. If dedicated agents are required before `/goal`, run `npx goalbuddy agents`. |
-| `missing` | Neither an installed config nor the bundled template was verified. | `/goal` can proceed through PM fallback. If dedicated agents are required before `/goal`, run `npx goalbuddy install`. |
-| `unknown` | Agent availability could not be checked. | `/goal` can proceed through PM fallback. To check before `/goal`, run `npx goalbuddy doctor`. |
+| `bundled_not_installed` | The bundled `goal_*.toml` template exists with the skill, but no matching installed agent config was verified. | `/goal` can proceed through PM fallback. If dedicated agents are required before `/goal`, run the GoalBuddy CLI through the user's install channel with `agents`. |
+| `missing` | Neither an installed config nor the bundled template was verified. | `/goal` can proceed through PM fallback. If dedicated agents are required before `/goal`, run the GoalBuddy CLI through the user's install channel with `install`. |
+| `unknown` | Agent availability could not be checked. | `/goal` can proceed through PM fallback. To check before `/goal`, run the GoalBuddy CLI through the user's install channel with `doctor`. |
 
 Non-`installed` states are warnings, not false failures, because the main `/goal` PM can perform Scout/Judge/Worker-shaped tasks directly when dedicated agents are unavailable.
 
@@ -570,11 +586,11 @@ Treat `reasoning_hint` as PM guidance. It does not override task scope, write pe
 
 ## Execution Quality Commands
 
-Use `goalbuddy prompt docs/goals/<slug>` to render a compact prompt for the active task. The prompt includes only task-specific material, safe agent metadata, continuation warnings, and the expected receipt shape. It should not include broad chat history or dump the whole state file.
+Use `node <skill-path>/scripts/render-task-prompt.mjs docs/goals/<slug>` to render a compact prompt for the active task. The prompt includes only task-specific material, safe agent metadata, continuation warnings, and the expected receipt shape. It should not include broad chat history or dump the whole state file.
 
-When dispatching Codex subagents from a GoalBuddy prompt, the `required_spawn_agent_type` is mandatory. Use that exact `spawn_agent` `agent_type` (`goal_scout`, `goal_worker`, or `goal_judge`). Do not substitute generic `scout`, `worker`, or `judge` agents; if the required GoalBuddy agent is unavailable, stop spawning and continue as PM fallback or run `npx goalbuddy agents`/`npx goalbuddy install`. After one `wait_agent` timeout with no visible allowed-file changes, stop waiting, record the timeout, and recover deterministically instead of waiting forever.
+When dispatching Codex subagents from a GoalBuddy prompt, the `required_spawn_agent_type` is mandatory. Use that exact `spawn_agent` `agent_type` (`goal_scout`, `goal_worker`, or `goal_judge`). Do not substitute generic `scout`, `worker`, or `judge` agents; if the required GoalBuddy agent is unavailable, stop spawning and continue as PM fallback or ask the operator to run the GoalBuddy CLI through their install channel with `agents` or `install`. After one `wait_agent` timeout with no visible allowed-file changes, stop waiting, record the timeout, and recover deterministically instead of waiting forever.
 
-Use `goalbuddy parallel-plan docs/goals/<slug>` when the user explicitly asks for parallel agent work. It is read-only: it recommends safe Scout/Judge handoffs and Worker handoffs only when write scopes are known and disjoint. It does not mutate `state.yaml`, create sub-goals, apply receipts, or spawn agents.
+Use `node <skill-path>/scripts/parallel-plan.mjs docs/goals/<slug>` when the user explicitly asks for parallel agent work. It is read-only: it recommends safe Scout/Judge handoffs and Worker handoffs only when write scopes are known and disjoint. It does not mutate `state.yaml`, create sub-goals, apply receipts, or spawn agents.
 
 ## Completion
 

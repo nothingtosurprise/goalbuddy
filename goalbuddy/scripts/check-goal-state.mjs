@@ -297,12 +297,12 @@ if (isWeakProof(completionProof)) {
 function agentStatusWarning(agent, status) {
   const agentLabel = agent[0].toUpperCase() + agent.slice(1);
   if (status === "bundled_not_installed") {
-    return `agents.${agent} is bundled_not_installed; /goal can continue through PM fallback, but dedicated ${agentLabel} delegation is unavailable until installed. If dedicated agents are required before /goal, run: npx goalbuddy agents`;
+    return `agents.${agent} is bundled_not_installed; /goal can continue through PM fallback, but dedicated ${agentLabel} delegation is unavailable until installed. If dedicated agents are required before /goal, run the GoalBuddy CLI through the user's install channel with: agents`;
   }
   if (status === "missing") {
-    return `agents.${agent} is missing; /goal can continue through PM fallback, but dedicated ${agentLabel} delegation is unavailable. If dedicated agents are required before /goal, run: npx goalbuddy install`;
+    return `agents.${agent} is missing; /goal can continue through PM fallback, but dedicated ${agentLabel} delegation is unavailable. If dedicated agents are required before /goal, run the GoalBuddy CLI through the user's install channel with: install`;
   }
-  return `agents.${agent} is unknown; /goal can continue through PM fallback, but dedicated ${agentLabel} delegation was not verified. To check before /goal, run: npx goalbuddy doctor`;
+  return `agents.${agent} is unknown; /goal can continue through PM fallback, but dedicated ${agentLabel} delegation was not verified. To check before /goal, run the GoalBuddy CLI through the user's install channel with: doctor`;
 }
 
 for (const { agent, status } of agentStatuses) {
@@ -353,6 +353,7 @@ for (const task of tasks) {
 if (tasks.length === 0) errors.push("tasks must contain at least one task");
 
 const activeTasks = tasks.filter((task) => task.status === "active");
+const terminalApprovalWait = isTerminalApprovalWait(tasks, activeTasks, activeTask);
 if (goalStatus === "done") {
   if (activeTasks.length !== 0) errors.push("done goals must not have an active task");
   if (activeTask !== null) errors.push("done goals must set active_task: null");
@@ -364,7 +365,7 @@ if (goalStatus === "done") {
   }
 } else if (goalStatus === "blocked") {
   if (activeTasks.length > 1) errors.push("blocked goals may have at most one active task");
-  if (continuousUntilFullOutcome && missingInputOrCredentialsDoNotStopGoal) {
+  if (continuousUntilFullOutcome && missingInputOrCredentialsDoNotStopGoal && !terminalApprovalWait) {
     errors.push("continuous goals must keep goal.status active; missing input or credentials should block specific tasks, not the whole goal");
   }
 } else if (activeTasks.length !== 1) {
@@ -435,6 +436,23 @@ for (const task of tasks) {
 }
 
 warnings.push(...microSliceWarnings(tasks, activeTask, goalStatus));
+
+function isTerminalApprovalWait(tasks, activeTasks, activeTask) {
+  if (goalStatus !== "blocked") return false;
+  if (activeTask !== null) return false;
+  if (activeTasks.length !== 0) return false;
+
+  const unfinishedTasks = tasks.filter((task) => task.status !== "done");
+  if (unfinishedTasks.length === 0) return false;
+  if (unfinishedTasks.some((task) => task.status !== "blocked")) return false;
+
+  return unfinishedTasks.some((task) => {
+    if (!task.receipt.present || task.receipt.value === null) return false;
+    return task.receipt.scalar("result") === "blocked"
+      && task.receipt.scalar("waiting_for_user_approval") === true
+      && Boolean(task.receipt.scalar("required_reply"));
+  });
+}
 
 function validateSubgoal(task) {
   if (isChildCheck) {
