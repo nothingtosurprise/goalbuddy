@@ -95,7 +95,6 @@ function patternsOverlap(left, right) {
   if (!aHasGlob && !bHasGlob) return false;
   if (!aHasGlob) return globToRegExp(b).test(a);
   if (!bHasGlob) return globToRegExp(a).test(b);
-  if (hasUnsupportedGlob(a) || hasUnsupportedGlob(b)) return literalPrefixesMayOverlap(a, b);
   return literalPrefixesMayOverlap(a, b);
 }
 
@@ -109,10 +108,6 @@ function literalPrefixesMayOverlap(left, right) {
 function literalPrefix(pattern) {
   const match = /[*?[\]]/.exec(pattern);
   return match ? pattern.slice(0, match.index) : pattern;
-}
-
-function hasUnsupportedGlob(pattern) {
-  return /[\[\]]/.test(pattern);
 }
 
 function globToRegExp(pattern) {
