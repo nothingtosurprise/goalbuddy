@@ -3,13 +3,17 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
-const statePath = process.argv[2];
+const inputPath = process.argv[2];
 const isChildCheck = process.argv.includes("--child");
 
-if (!statePath) {
-  console.error("Usage: node scripts/check-goal-state.mjs docs/goals/<slug>/state.yaml");
+if (!inputPath) {
+  console.error("Usage: node scripts/check-goal-state.mjs docs/goals/<slug>[/state.yaml]");
   process.exit(2);
 }
+
+const statePath = existsSync(inputPath) && statSync(inputPath).isDirectory()
+  ? join(inputPath, "state.yaml")
+  : inputPath;
 
 if (!existsSync(statePath)) {
   console.error(JSON.stringify({ ok: false, errors: [`state file not found: ${statePath}`], warnings: [] }, null, 2));
@@ -23,7 +27,13 @@ const warnings = [];
 
 function clean(value) {
   if (value === undefined || value === null) return null;
-  const cleaned = value.replace(/#.*/, "").trim().replace(/^[\'\"]|[\'\"]$/g, "");
+  let cleaned = String(value).trim();
+  const quoted = cleaned.match(/^"([^"]*)"\s*(?:#.*)?$|^'([^']*)'\s*(?:#.*)?$/);
+  if (quoted) {
+    cleaned = (quoted[1] ?? quoted[2]).trim();
+  } else {
+    cleaned = cleaned.replace(/(^|\s)#.*$/, "").trim();
+  }
   if (cleaned === "" || cleaned === "null") return null;
   if (cleaned === "true") return true;
   if (cleaned === "false") return false;
@@ -234,7 +244,13 @@ function rootEntryErrors() {
   const unexpected = [];
   for (const entry of readdirSync(root).filter((item) => item !== ".DS_Store")) {
     const path = join(root, entry);
-    const stats = statSync(path);
+    let stats;
+    try {
+      stats = statSync(path);
+    } catch {
+      unexpected.push(`${entry} (unreadable)`);
+      continue;
+    }
     if (!allowed.has(entry)) {
       unexpected.push(entry);
     } else if ((entry === "notes" || entry === ".goalbuddy-board" || entry === "subgoals") && !stats.isDirectory()) {

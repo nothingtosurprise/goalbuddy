@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -1219,6 +1219,45 @@ checks:
     const result = runChecker(root);
     assert.equal(result.status, 0, result.stderr || JSON.stringify(result.stdout));
     assert.equal(result.stdout.ok, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("accepts a goal directory argument", () => {
+  const root = makeRoot();
+  try {
+    writeState(root, validScoutBoard);
+    const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.ok, true, result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("preserves # inside quoted scalars", () => {
+  const root = makeRoot();
+  try {
+    writeState(root, validScoutBoard.replace(
+      'objective: "Map the repo and identify improvement candidates."',
+      'objective: "#12 regression: map the repo."',
+    ));
+    const result = runChecker(root);
+    assert.equal(result.stdout.ok, true, JSON.stringify(result.stdout.errors));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reports a broken symlink in the goal root instead of crashing", () => {
+  const root = makeRoot();
+  try {
+    writeState(root, validScoutBoard);
+    symlinkSync(join(root, "does-not-exist"), join(root, "dangling"));
+    const result = runChecker(root);
+    assert.equal(typeof result.stdout.ok, "boolean", result.stderr);
+    assert.equal(result.stdout.ok, false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
