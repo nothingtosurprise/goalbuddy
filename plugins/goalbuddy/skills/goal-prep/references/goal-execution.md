@@ -118,6 +118,24 @@ receipt:
   summary: "invoice.paid now routes through eventRouter.dispatch; regression test added."
 ```
 
+A `done` Worker receipt must list only passing commands. The bundled checker rejects a done Worker whose `commands` include a non-`pass` status. If the task's own `verify` did not pass, the task is not done: mark it `blocked` and keep the failing command visible in the blocked receipt — do not move truthful failure evidence into prose to make a `done` receipt validate.
+
+Blocked Worker receipt:
+
+```yaml
+receipt:
+  result: blocked
+  blocked_reason: "npm test fails for a cause outside allowed_files (broken test-runner script in package.json)."
+  changed_files:
+    - src/billing/router.ts
+  commands:
+    - cmd: npm test
+      status: fail
+  summary: "Router fix is complete and green in isolation; the task verify is blocked by an out-of-scope runner defect."
+  spawned_tasks:
+    - T005
+```
+
 For long findings or decisions, write `notes/<task-id>-<slug>.md` and point to it:
 
 ```yaml
@@ -151,6 +169,8 @@ Blocked tasks do not necessarily block the goal. The PM should keep doing safe l
 - update receipts and verification freshness.
 
 Avoid setting `goal.status: blocked` for missing input, credentials, production access, destructive-operation permission, or policy decisions. Block the specific task instead, record the missing requirement, and continue with every safe local workaround or adjacent slice.
+
+A common local case: the task's own fix is complete and correct, but its `verify` command fails for a pre-existing cause outside the task's `allowed_files` — for example, a broken test-runner script masking a correct code fix. Do not mark that task `done`, and do not widen its `allowed_files` mid-flight. Mark it `blocked` with the failing verify visible in the receipt, spawn a new Worker task scoped to the out-of-scope file, and verify the original oracle there.
 
 Exception: if an exact human approval phrase is the only remaining blocker and no safe local work remains, ask once, preserve the exact phrase, and stop. Set `goal.status: blocked`, set `active_task: null`, mark every unfinished task `blocked`, and write a receipt with `result: blocked`, `waiting_for_user_approval: true`, and `required_reply: "<exact phrase>"`. Do not rephrase, retry, spawn follow-up work, or post another approval prompt until the user replies.
 

@@ -210,6 +210,8 @@ Use this skill for goals that are broad, multi-hour, ambiguous, high-risk, alrea
 
 For a one-change task, do not create a GoalBuddy board.
 
+If the user explicitly invokes `$goal-prep` on a one-change task anyway, ask one guided question offering the direct change without a board (Recommended) or a minimal board. If the user has already said to proceed or use defaults, prepare the smallest valid board and note the tradeoff in the prep response.
+
 Scout and Judge tasks may identify optional publishing, reporting, integration, plugin, or channel opportunities as improvement candidates. Treat those as normal board tasks with concrete implementation plans. `state.yaml` remains board truth.
 
 ## The Four Primitives
@@ -286,6 +288,8 @@ allowed_files: []
 verify: []
 stop_if: []
 ```
+
+Task ids must match the `T###` shape (for example `T001`, `T999`). The bundled checker rejects other formats such as `T001b`; a sibling or follow-up task gets the next free number.
 
 The PM owns the board. Scout, Judge, and Worker return receipts; they do not select the next active task or mark the goal complete. Receipt shapes and all other runtime rules live in `references/goal-execution.md`.
 

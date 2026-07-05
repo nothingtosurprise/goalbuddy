@@ -51,6 +51,8 @@ test("Goal Prep invocation boundary keeps $goal-prep prepare-only", () => {
     assert.match(text, /A good task is the largest safe useful slice/);
     assert.match(text, /Safe does not mean small/);
     assert.match(text, /references\/goal-execution\.md/);
+    assert.match(text, /Task ids must match the `T###` shape/);
+    assert.match(text, /explicitly invokes `\$goal-prep` on a one-change task/);
   }
 });
 
@@ -72,6 +74,10 @@ test("the execution contract carries the /goal runtime rules", () => {
     assert.match(text, /Never edit product implementation files during board-health work/);
     assert.match(text, /goalbuddy_receipt_v1/);
     assert.match(text, /full_outcome_complete: true/);
+    assert.match(text, /A `done` Worker receipt must list only passing commands/);
+    assert.match(text, /result: blocked/);
+    assert.match(text, /blocked_reason/);
+    assert.match(text, /do not widen its `allowed_files` mid-flight/);
   }
 });
 
