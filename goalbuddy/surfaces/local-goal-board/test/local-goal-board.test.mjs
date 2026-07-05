@@ -399,6 +399,21 @@ test("serves global local board settings with defensive normalization", async ()
       });
       assert.match(readFileSync(settingsPath, "utf8"), /"theme": "dark"/);
 
+      const partialResponse = await fetch(`${server.hubUrl}api/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { theme: "light" } }),
+      });
+      assert.equal(partialResponse.status, 200);
+      assert.deepEqual((await partialResponse.json()).settings, {
+        theme: "light",
+        density: "compact",
+        completedVisibility: "collapse",
+        boardOpenBehavior: "newest",
+        motion: "reduce",
+        lastBoardPath: "/settings-goal/",
+      });
+
       const invalidResponse = await fetch(`${server.hubUrl}api/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -406,12 +421,12 @@ test("serves global local board settings with defensive normalization", async ()
       });
       assert.equal(invalidResponse.status, 200);
       assert.deepEqual((await invalidResponse.json()).settings, {
-        theme: "system",
-        density: "comfortable",
-        completedVisibility: "show",
-        boardOpenBehavior: "last",
+        theme: "light",
+        density: "compact",
+        completedVisibility: "collapse",
+        boardOpenBehavior: "newest",
         motion: "allow",
-        lastBoardPath: "",
+        lastBoardPath: "/settings-goal/",
       });
     } finally {
       await server.close();
@@ -836,6 +851,39 @@ tasks:
     const payload = createBoardPayload(goalDir);
     assert.equal(payload.tasks[0].id, "T001");
     assert.match(payload.parseWarning, /fallback/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deduplicated board paths report matching slugs", async () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-local-board-dedup-slug-"));
+  try {
+    const goalA = join(root, "goal-a");
+    const goalB = join(root, "goal-b");
+    for (const goalDir of [goalA, goalB]) {
+      mkdirSync(join(goalDir, "notes"), { recursive: true });
+      writeFileSync(join(goalDir, "state.yaml"), stateYaml("active", { title: "Dup Goal", slug: "dup-goal" }));
+    }
+
+    const server = await startBoardServer({ goalDir: goalA, host: "127.0.0.1", port: 0 });
+    try {
+      const port = new URL(server.apiUrl).port;
+      const registration = await fetch(`http://127.0.0.1:${port}/api/boards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goalDir: goalB }),
+      });
+      assert.equal(registration.status, 200);
+      const second = await registration.json();
+      assert.match(second.url, /\/dup-goal-2\/$/);
+      assert.equal(second.slug, "dup-goal-2");
+
+      const boards = (await (await fetch(`http://127.0.0.1:${port}/api/boards`)).json()).boards;
+      assert.deepEqual(boards.map((board) => board.slug).sort(), ["dup-goal", "dup-goal-2"]);
+    } finally {
+      await server.close();
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

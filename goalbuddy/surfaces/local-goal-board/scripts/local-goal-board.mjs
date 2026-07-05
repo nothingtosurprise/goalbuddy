@@ -376,7 +376,9 @@ function nextBoardPath(goalDir, payload, boards) {
 }
 
 function boardSummary(board, baseUrl) {
-  const slug = slugifyPathSegment(board.lastPayload.goal?.slug || basename(board.root)) || "goal";
+  const slug = board.boardPath.replace(/^\/+|\/+$/g, "")
+    || slugifyPathSegment(board.lastPayload.goal?.slug || basename(board.root))
+    || "goal";
   return {
     goalDir: board.root,
     appDir: board.appDir,
@@ -614,15 +616,15 @@ function readBoardSettings() {
 }
 
 function writeBoardSettings(settings) {
-  const normalized = normalizeSettings(settings);
+  const normalized = normalizeSettings(settings, readBoardSettings());
   const path = settingsPath();
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(normalized, null, 2)}\n`);
   return normalized;
 }
 
-function normalizeSettings(settings) {
-  const normalized = { ...SETTINGS_DEFAULTS };
+function normalizeSettings(settings, base = SETTINGS_DEFAULTS) {
+  const normalized = { ...base };
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) return normalized;
   for (const [key, allowed] of Object.entries(SETTINGS_OPTIONS)) {
     if (allowed.has(settings[key])) normalized[key] = settings[key];
