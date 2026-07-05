@@ -44,6 +44,8 @@ In Claude Code, use:
 
 Goal Prep creates the board and prints the exact `/goal` command to run next. That is the whole path.
 
+In Claude Code, GoalBuddy installs a real `/goal` command that runs the execution loop. In Codex, native `/goal` is the separate OpenAI-gated feature GoalBuddy prepares boards for.
+
 ## Codex Install Model
 
 For Codex, the canonical install is the native plugin plus bundled agents:

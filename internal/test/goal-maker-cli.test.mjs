@@ -1320,3 +1320,21 @@ test("installs the Claude skill as goal-prep and migrates the legacy directory",
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("installs the /goal command for Claude Code", () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-goal-command-"));
+  try {
+    const claudeHome = join(root, "claude");
+    const result = runGoalMaker(["install", "--target", "claude", "--claude-home", claudeHome, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const command = readFileSync(join(claudeHome, "commands", "goal.md"), "utf8");
+    assert.match(command, /GoalBuddy/);
+    assert.match(command, /state\.yaml/);
+
+    const doctor = runGoalMaker(["doctor", "--target", "claude", "--claude-home", claudeHome]);
+    assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
+    assert.equal(JSON.parse(doctor.stdout).goal_command_present, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

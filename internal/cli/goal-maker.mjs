@@ -381,6 +381,23 @@ function installClaudeAgents({ quiet = false } = {}) {
   return results;
 }
 
+function claudeGoalCommandPath() {
+  return join(claudeHome(), "commands", "goal.md");
+}
+
+function installClaudeGoalCommand({ quiet = false } = {}) {
+  const source = join(claudePluginSource, "commands", "goal.md");
+  const target = claudeGoalCommandPath();
+  if (!existsSync(source)) return { status: "missing_source", path: target };
+  const sourceHash = sha256(readFileSync(source));
+  const previousHash = existsSync(target) ? sha256(readFileSync(target)) : "";
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(source, target);
+  const status = previousHash ? previousHash === sourceHash ? "unchanged" : "updated" : "installed";
+  if (!quiet) console.log(`installed ${target}`);
+  return { status, path: target };
+}
+
 function cleanupLegacyClaudeCommands({ quiet = false } = {}) {
   const legacyPath = legacyClaudeCommandPath();
   if (!existsSync(legacyPath)) return { removed: false, path: legacyPath };
@@ -401,6 +418,7 @@ async function buildClaudeInstallReport() {
     claude_home: claudeHome(),
     skill: installClaudeSkill({ quiet }),
     agents: installClaudeAgents({ quiet }),
+    goal_command: installClaudeGoalCommand({ quiet }),
     legacy_commands_cleanup: cleanupLegacyClaudeCommands({ quiet }),
     warnings: [],
   };
@@ -474,6 +492,8 @@ function doctorClaude() {
   const legacyCommandPresent = existsSync(legacyCommandPath);
   const legacySkillPath = legacyClaudeSkillRoot();
   const legacySkillPresent = existsSync(legacySkillPath);
+  const goalCommandPath = claudeGoalCommandPath();
+  const goalCommandPresent = existsSync(goalCommandPath);
 
   console.log(JSON.stringify({
     target: "claude",
@@ -483,13 +503,15 @@ function doctorClaude() {
     installed_agents: agents,
     missing_agents: missingAgents,
     stale_agents: staleAgents,
+    goal_command_present: goalCommandPresent,
+    goal_command_path: goalCommandPath,
     legacy_command_present: legacyCommandPresent,
     legacy_command_path: legacyCommandPath,
     legacy_skill_present: legacySkillPresent,
     legacy_skill_path: legacySkillPath,
   }, null, 2));
 
-  const installOk = installed && missingAgents.length === 0 && staleAgents.length === 0 && !legacyCommandPresent && !legacySkillPresent;
+  const installOk = installed && missingAgents.length === 0 && staleAgents.length === 0 && goalCommandPresent && !legacyCommandPresent && !legacySkillPresent;
   process.exit(installOk ? 0 : 1);
 }
 
@@ -503,6 +525,7 @@ function printClaudeInstallReport(report) {
   console.log("");
   console.log(`Skill: ${report.skill.status} at ${report.skill.path}`);
   console.log(`Agents: ${summarizeStatuses(report.agents)}`);
+  console.log(`Command: /goal ${report.goal_command.status} at ${report.goal_command.path}`);
   if (report.legacy_commands_cleanup?.removed) {
     console.log(`Removed legacy command: ${report.legacy_commands_cleanup.path}`);
   }
