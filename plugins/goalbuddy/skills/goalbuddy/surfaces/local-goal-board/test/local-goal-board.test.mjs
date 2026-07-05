@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -780,6 +781,73 @@ tasks:
       - "Need files outside allowed_files."
     receipt: null
 `;
+}
+
+test("rejects requests with a non-local Host header", async () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-local-board-host-check-"));
+  const goalDir = join(root, "goal");
+  try {
+    mkdirSync(join(goalDir, "notes"), { recursive: true });
+    writeFileSync(join(goalDir, "state.yaml"), stateYaml("active", { title: "Host Check Goal", slug: "host-check-goal" }));
+
+    const server = await startBoardServer({ goalDir, host: "127.0.0.1", port: 0 });
+    try {
+      const port = new URL(server.apiUrl).port;
+      const rebound = await rawRequest(port, { headers: { Host: "evil.example" } });
+      assert.equal(rebound.status, 403);
+
+      const allowed = await fetch(`http://127.0.0.1:${port}/api/boards`);
+      assert.equal(allowed.status, 200);
+    } finally {
+      await server.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rejects cross-site POST /api/boards", async () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-local-board-origin-check-"));
+  const goalDir = join(root, "goal");
+  try {
+    mkdirSync(join(goalDir, "notes"), { recursive: true });
+    writeFileSync(join(goalDir, "state.yaml"), stateYaml("active", { title: "Origin Check Goal", slug: "origin-check-goal" }));
+
+    const server = await startBoardServer({ goalDir, host: "127.0.0.1", port: 0 });
+    try {
+      const port = new URL(server.apiUrl).port;
+      const crossSite = await fetch(`http://127.0.0.1:${port}/api/boards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "http://evil.example" },
+        body: JSON.stringify({ goalDir }),
+      });
+      assert.equal(crossSite.status, 403);
+
+      const sameOrigin = await fetch(`http://127.0.0.1:${port}/api/boards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: `http://127.0.0.1:${port}` },
+        body: JSON.stringify({ goalDir }),
+      });
+      assert.equal(sameOrigin.status, 200);
+    } finally {
+      await server.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function rawRequest(port, { method = "GET", path = "/api/boards", headers = {}, body = "" } = {}) {
+  return new Promise((resolveRequest, rejectRequest) => {
+    const request = httpRequest({ host: "127.0.0.1", port, method, path, headers, setHost: false }, (response) => {
+      let data = "";
+      response.on("data", (chunk) => { data += chunk; });
+      response.on("end", () => resolveRequest({ status: response.statusCode, body: data }));
+    });
+    request.on("error", rejectRequest);
+    if (body) request.write(body);
+    request.end();
+  });
 }
 
 function stateYaml(status, { title = "Live board", slug = "live-board" } = {}) {

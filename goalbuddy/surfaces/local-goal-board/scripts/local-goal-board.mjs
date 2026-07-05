@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, readFileSync, realpathSync, watch, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -157,6 +157,9 @@ export async function startBoardServer(options = {}) {
   const boards = new Map();
   let baseUrl = "";
   let initialBoard = null;
+  const allowedHostnames = new Set(["localhost", "127.0.0.1", "[::1]", "::1", DEFAULT_PUBLIC_HOST]);
+  if (host) allowedHostnames.add(String(host).toLowerCase());
+  if (publicHost) allowedHostnames.add(String(publicHost).toLowerCase());
 
   const addBoard = (candidateGoalDir, candidateAppDir = "") => {
     const root = resolve(candidateGoalDir);
@@ -192,6 +195,14 @@ export async function startBoardServer(options = {}) {
 
   const server = createServer(async (request, response) => {
     try {
+      if (!requestHostAllowed(request, allowedHostnames)) {
+        sendForbidden(response, "Unexpected Host header for the GoalBuddy local board.");
+        return;
+      }
+      if ((request.method === "POST" || request.method === "PUT") && !originAllowed(request, allowedHostnames)) {
+        sendForbidden(response, "Cross-site requests are not allowed for the GoalBuddy local board.");
+        return;
+      }
       const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
       if (request.method === "POST" && url.pathname === "/api/boards") {
         const payload = await readJsonRequest(request);
@@ -522,6 +533,34 @@ function sendJson(response, payload) {
   response.end(JSON.stringify(payload, null, 2));
 }
 
+function requestHostAllowed(request, allowedHostnames) {
+  const rawHost = request.headers.host || "";
+  if (!rawHost) return false;
+  try {
+    return allowedHostnames.has(new URL(`http://${rawHost}`).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function originAllowed(request, allowedHostnames) {
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  try {
+    return allowedHostnames.has(new URL(origin).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function sendForbidden(response, message) {
+  response.writeHead(403, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  response.end(message);
+}
+
 function sendError(response, error) {
   response.writeHead(400, {
     "Content-Type": "text/plain; charset=utf-8",
@@ -536,14 +575,14 @@ function sendEvent(response, payload) {
 
 function serveStatic(appDir, pathname, response) {
   const cleanPath = pathname === "/" ? "/index.html" : pathname;
-  if (!/^\/[A-Za-z0-9_.-]+$/.test(cleanPath)) {
+  if (!/^\/[A-Za-z0-9_.-]+$/.test(cleanPath) || cleanPath === "/.." || cleanPath === "/.") {
     response.writeHead(404);
     response.end("Not found");
     return;
   }
 
   const file = join(appDir, cleanPath.slice(1));
-  if (!existsSync(file)) {
+  if (!existsSync(file) || !statSync(file).isFile()) {
     response.writeHead(404);
     response.end("Not found");
     return;
