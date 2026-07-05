@@ -27,6 +27,7 @@
     "check": "node --check internal/cli/*.mjs goalbuddy/scripts/*.mjs goalbuddy/surfaces/local-goal-board/scripts/*.mjs goalbuddy/surfaces/local-goal-board/scripts/lib/*.mjs && node --test internal/test/*.test.mjs goalbuddy/surfaces/local-goal-board/test/*.test.mjs",
     "test": "node --test internal/test/*.test.mjs goalbuddy/surfaces/local-goal-board/test/*.test.mjs",
     "pack:dry-run": "npm pack --dry-run",
+    "sync:plugin": "node internal/cli/sync-skill-tree.mjs --write",
     "postinstall": "node internal/cli/postinstall.mjs",
     "publish:check": "node internal/cli/check-publish-version.mjs && npm run pack:dry-run",
     "prepublishOnly": "node internal/cli/check-publish-version.mjs"

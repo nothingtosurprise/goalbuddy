@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createBoardPayload, writeBoardApp } from "../scripts/lib/goal-board.mjs";
+import { buildColumns, createBoardPayload, writeBoardApp } from "../scripts/lib/goal-board.mjs";
 import { parseArgs, startBoardServer } from "../scripts/local-goal-board.mjs";
 
 test("normalizes a dense goal into local board columns", () => {
@@ -23,6 +23,71 @@ test("normalizes a dense goal into local board columns", () => {
   assert.equal(scout.receipt.summary, "T001 completed during the progressive board motion demo.");
 });
 
+test("orders completed cards newest first while preserving queued order", () => {
+  const columns = buildColumns([
+    { id: "T001", column: "completed", status: "done" },
+    { id: "T002", column: "todo", status: "queued" },
+    { id: "T003", column: "completed", status: "done" },
+    { id: "T004", column: "todo", status: "queued" },
+  ]);
+
+  assert.deepEqual(columns.find((column) => column.id === "todo").tasks.map((task) => task.id), ["T002", "T004"]);
+  assert.deepEqual(columns.find((column) => column.id === "completed").tasks.map((task) => task.id), ["T003", "T001"]);
+});
+
+test("renders multiple active tasks in the in-progress column", () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-multiple-active-"));
+  try {
+    const goalDir = join(root, "parallel-workers");
+    mkdirSync(join(goalDir, "notes"), { recursive: true });
+    writeFileSync(join(goalDir, "state.yaml"), `version: 2
+goal:
+  title: "Parallel workers"
+  slug: "parallel-workers"
+  kind: specific
+  tranche: "Render disjoint active workers."
+  status: active
+active_task: T001
+tasks:
+  - id: T001
+    type: worker
+    assignee: Worker A
+    status: active
+    objective: "Patch the board parser."
+    allowed_files:
+      - goalbuddy/surfaces/local-goal-board/scripts/lib/goal-board.mjs
+    verify:
+      - node --test goalbuddy/surfaces/local-goal-board/test/local-goal-board.test.mjs
+    stop_if:
+      - "Need files outside allowed_files."
+    receipt: null
+  - id: T002
+    type: worker
+    assignee: Worker B
+    status: active
+    objective: "Patch the board tests."
+    allowed_files:
+      - goalbuddy/surfaces/local-goal-board/test/local-goal-board.test.mjs
+    verify:
+      - node --test goalbuddy/surfaces/local-goal-board/test/local-goal-board.test.mjs
+    stop_if:
+      - "Need files outside allowed_files."
+    receipt: null
+`);
+
+    const payload = createBoardPayload(goalDir);
+    assert.equal(payload.goal.activeTask, "T001");
+    assert.equal(payload.counts.inProgress, 2);
+    assert.deepEqual(
+      payload.columns.find((column) => column.id === "in-progress").tasks.map((task) => task.id),
+      ["T001", "T002"],
+    );
+    assert.deepEqual(payload.tasks.filter((task) => task.active).map((task) => task.id), ["T001", "T002"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("loads depth-1 subgoal boards into parent task payloads", () => {
   const payload = createBoardPayload(resolve("goalbuddy/surfaces/local-goal-board/examples/subgoal-parent"));
   const parentTask = payload.tasks.find((task) => task.id === "T004");
@@ -37,10 +102,10 @@ test("loads depth-1 subgoal boards into parent task payloads", () => {
   assert.equal(parentTask.subgoal.board.tasks.find((task) => task.id === "T002").subgoal, null);
 });
 
-test("uses compact card titles while preserving full objectives", () => {
-  const root = mkdtempSync(join(tmpdir(), "goalbuddy-compact-titles-"));
+test("uses readable card titles while preserving full objectives", () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-readable-titles-"));
   try {
-    const goalDir = join(root, "compact-titles");
+    const goalDir = join(root, "readable-titles");
     mkdirSync(join(goalDir, "notes"), { recursive: true });
     writeFileSync(join(goalDir, "state.yaml"), `version: 2
 goal:
@@ -70,6 +135,13 @@ tasks:
     status: queued
     objective: "This objective can stay much more detailed because it belongs in the modal, not on the card face."
     receipt: null
+  - id: T004
+    title: "Run installed-Cursor runtime proof for a named model request through the local BYOK bridge"
+    type: worker
+    assignee: Worker
+    status: queued
+    objective: "Run installed-Cursor runtime proof for a named model request through the local BYOK bridge."
+    receipt: null
 `);
 
     const payload = createBoardPayload(goalDir);
@@ -77,6 +149,10 @@ tasks:
     assert.equal(payload.tasks.find((task) => task.id === "T001").objective.includes("admin_seed_metrics.enrichment_qa"), true);
     assert.equal(payload.tasks.find((task) => task.id === "T002").title, "Implement /contacts/con_aaron_keller route");
     assert.equal(payload.tasks.find((task) => task.id === "T003").title, "Human-friendly release title");
+    assert.equal(
+      payload.tasks.find((task) => task.id === "T004").title,
+      "Run installed-Cursor runtime proof for a named model request through the local BYOK bridge",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -249,6 +325,7 @@ test("writes a minimal GoalBuddy web app into the goal directory", () => {
   assert.match(css, /:root\[data-theme="dark"\]/);
   assert.match(css, /:root\[data-density="compact"\] \.task-card/);
   assert.match(css, /:root\[data-completed-visibility="collapse"\]/);
+  assert.match(css, /-webkit-line-clamp: 5/);
   assert.match(css, /\.subgoal-board/);
   assert.match(css, /\.board-error/);
   assert.match(js, /new EventSource\("\.\/events"\)/);
@@ -448,6 +525,50 @@ test("serves board JSON and streams live state changes over SSE", async () => {
   }
 });
 
+test("coalesces transient active-task violations during multi-write transitions", async () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-local-board-transition-"));
+  const goalDir = join(root, "transition-goal");
+  try {
+    mkdirSync(join(goalDir, "notes"), { recursive: true });
+    writeFileSync(join(goalDir, "state.yaml"), transitionStateYaml({
+      activeTask: "T001",
+      firstStatus: "active",
+      secondStatus: "queued",
+    }));
+
+    const server = await startBoardServer({ goalDir, host: "127.0.0.1", port: 0 });
+    try {
+      const controller = new AbortController();
+      const events = await fetch(`${server.url}events`, { signal: controller.signal });
+      assert.equal(events.status, 200);
+      const reader = events.body.getReader();
+
+      await readUntil(reader, /"activeTask":"T001"/);
+      writeFileSync(join(goalDir, "state.yaml"), transitionStateYaml({
+        activeTask: "T002",
+        firstStatus: "active",
+        secondStatus: "active",
+      }));
+      await delay(120);
+      writeFileSync(join(goalDir, "state.yaml"), transitionStateYaml({
+        activeTask: "T002",
+        firstStatus: "done",
+        secondStatus: "active",
+      }));
+
+      const update = await readUntil(reader, /"activeTask":"T002"/);
+      assert.doesNotMatch(update, /more than one active task/i);
+
+      controller.abort();
+      await reader.cancel().catch(() => {});
+    } finally {
+      await server.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("streams parent board updates when linked child subgoal state changes", async () => {
   const root = mkdtempSync(join(tmpdir(), "goalbuddy-local-board-subgoal-live-"));
   const goalDir = join(root, "parent-goal");
@@ -600,6 +721,10 @@ async function readUntil(reader, pattern) {
   assert.fail(`Timed out waiting for ${pattern}. Received:\n${text}`);
 }
 
+function delay(ms) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
+}
+
 function parentWithSubgoalYaml() {
   return `version: 2
 goal:
@@ -620,6 +745,39 @@ tasks:
       path: subgoals/T001-child/state.yaml
       owner: Worker
       depth: 1
+    receipt: null
+`;
+}
+
+function transitionStateYaml({ activeTask, firstStatus, secondStatus }) {
+  return `version: 2
+goal:
+  title: "Transition Goal"
+  slug: "transition-goal"
+  kind: specific
+  tranche: "Verify multi-write task transition."
+  status: active
+active_task: ${activeTask}
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: ${firstStatus}
+    objective: "Map transition."
+    receipt:
+      result: done
+      summary: "Mapped transition."
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: ${secondStatus}
+    objective: "Implement transition."
+    allowed_files:
+      - goalbuddy/surfaces/local-goal-board/**
+    verify:
+      - npm run check
+    stop_if:
+      - "Need files outside allowed_files."
     receipt: null
 `;
 }
