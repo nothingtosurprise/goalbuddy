@@ -152,6 +152,13 @@ async function main() {
       }
       dispatchCli();
       break;
+    case "init":
+      if (wantsHelp()) {
+        usage();
+        break;
+      }
+      initGoal();
+      break;
     case "prompt":
       await prompt();
       break;
@@ -283,6 +290,7 @@ Usage:
   ${canonicalCliName} reset --target codex [--codex-home <path>] [--json]
   ${canonicalCliName} check-update [--json]
   ${canonicalCliName} board <docs/goals/slug> [--host <host>] [--port <port>] [--once] [--json]
+  ${canonicalCliName} init <slug> [--title "<Goal title>"] [--json]
   ${canonicalCliName} resume [docs/goals/slug] [--json]
   ${canonicalCliName} dispatch <docs/goals/slug> --to codex|claude-code [--task T###] [--model <name>] [--timeout <seconds>] [--json]
   ${canonicalCliName} prompt <docs/goals/slug> [--task T###] [--board <path/to/state.yaml>] [--json]
@@ -1208,6 +1216,37 @@ async function board() {
   }
   if (result.error) throw result.error;
   process.exit(result.status ?? 1);
+}
+
+function initGoal() {
+  const slug = positional(1);
+  if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+    argumentError(`Usage: ${canonicalCliName} init <slug> [--title "<Goal title>"] (slug: lowercase letters, digits, dashes)`);
+  }
+  const title = optionValue("--title") || slug.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
+  const goalDir = resolve("docs", "goals", slug);
+  if (existsSync(join(goalDir, "state.yaml"))) {
+    argumentError(`Board already exists: ${join(goalDir, "state.yaml")}`);
+  }
+
+  mkdirSync(join(goalDir, "notes"), { recursive: true });
+  const templates = join(skillSource, "templates");
+  writeFileSync(join(goalDir, "state.yaml"), readFileSync(join(templates, "state.yaml"), "utf8")
+    .replaceAll("<Goal title>", title)
+    .replaceAll("<goal-slug>", slug));
+  writeFileSync(join(goalDir, "goal.md"), readFileSync(join(templates, "goal.md"), "utf8")
+    .replaceAll("<Goal Title>", title)
+    .replaceAll("<goal-slug>", slug)
+    .replaceAll("<slug>", slug));
+
+  const runCommand = `/goal Follow docs/goals/${slug}/goal.md.`;
+  if (hasFlag("--json")) {
+    printJson({ created: goalDir, slug, title, run_command: runCommand });
+    return;
+  }
+  console.log(`Created GoalBuddy board: docs/goals/${slug}/`);
+  console.log("Next: refine the charter and intake with $goal-prep (Codex) or /goal-prep (Claude Code),");
+  console.log(`or start execution: ${runCommand}`);
 }
 
 function dispatchCli() {

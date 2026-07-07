@@ -79,7 +79,7 @@ export function normalizeGoalBoard(document, goalDir = "<memory>") {
     throw new GoalBoardError("Goal state must be a YAML mapping.");
   }
   if (Number(document.version) !== 2) {
-    throw new GoalBoardError("Only GoalBuddy v2 state.yaml files are supported.");
+    throw new GoalBoardError('Only GoalBuddy v2 state.yaml files are supported: the board is missing top-level "version: 2". Start from templates/state.yaml bundled with the goal-prep skill.');
   }
   if (!document.goal || typeof document.goal !== "object") {
     throw new GoalBoardError("Missing goal metadata.");

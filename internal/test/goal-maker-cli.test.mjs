@@ -1466,3 +1466,31 @@ test("resume scoped to one goal dir and empty repos behave", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("init scaffolds a working board from the bundled templates", () => {
+  const root = mkdtempSync(join(tmpdir(), "goalbuddy-init-"));
+  try {
+    const created = runGoalMaker(["init", "ship-widgets", "--json"], { cwd: root });
+    assert.equal(created.status, 0, created.stderr || created.stdout);
+    const report = JSON.parse(created.stdout);
+    assert.equal(report.slug, "ship-widgets");
+    assert.equal(report.run_command, "/goal Follow docs/goals/ship-widgets/goal.md.");
+    const state = readFileSync(join(root, "docs", "goals", "ship-widgets", "state.yaml"), "utf8");
+    assert.match(state, /version: 2/);
+    assert.match(state, /slug: "ship-widgets"/);
+    assert.match(state, /title: "Ship Widgets"/);
+    assert.equal(existsSync(join(root, "docs", "goals", "ship-widgets", "notes")), true);
+
+    const resume = runGoalMaker(["resume", "--json"], { cwd: root });
+    assert.equal(resume.status, 0, resume.stderr || resume.stdout);
+    const boards = JSON.parse(resume.stdout).boards;
+    assert.equal(boards[0].slug, "ship-widgets");
+    assert.equal(boards[0].status, "active");
+
+    const again = runGoalMaker(["init", "ship-widgets"], { cwd: root });
+    assert.equal(again.status, 2);
+    assert.match(again.stderr, /already exists/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
